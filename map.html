@@ -1,0 +1,64 @@
+<html>
+<head>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        #map { height: 600px; width: 100%; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        try {
+            console.log('Initializing Leaflet map with center: [{{centerLat}}, {{centerLon}}]');
+            let map = L.map('map').setView([{{centerLat}}, {{centerLon}}], 10);
+            console.log('Adding OpenStreetMap base layer');
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map).on('tileerror', function(error, tile) {
+                console.error('OpenStreetMap tile error:', error, tile);
+            });
+            
+            let currentLayer = null;
+            window.addEventListener('message', function(e) {
+                console.log('Received message:', e.data);
+                const data = e.data;
+                if (data.type === 'changeLayer' && data.url) {
+                    console.log('Adding layer:', data.url);
+                    if (currentLayer) {
+                        console.log('Removing current layer');
+                        map.removeLayer(currentLayer);
+                    }
+                    currentLayer = L.tileLayer(data.url, { maxZoom: 18 }).addTo(map).on('tileerror', function(error, tile) {
+                        console.error('GEE tile error:', error, tile);
+                    });
+                }
+                if (data.type === 'updateRadius') {
+                    console.log('Updating radius:', data.radius);
+                    fetch('https://adityadm2110.pythonanywhere.com/analyze', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ city: "{{city}}", radius: data.radius })
+                    })
+                    .then(response => {
+                        console.log('Analyze response status:', response.status);
+                        if (!response.ok) throw new Error('Analyze fetch failed: ' + response.statusText);
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log('Analyze response data:', data);
+                        if (data.map_data) {
+                            window.parent.postMessage({ type: 'updateMapData', mapData: data.map_data }, '*');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Fetch error:', error);
+                    });
+                }
+            });
+        } catch (error) {
+            console.error('Leaflet initialization error:', error);
+        }
+    </script>
+</body>
+</html>
